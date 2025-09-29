@@ -7,13 +7,14 @@ namespace Benchmark;
 [DisassemblyDiagnoser(syntax: DisassemblySyntax.Intel, maxDepth: 100), MemoryDiagnoser]
 public class FibRec1
 {
-    private MidFunc func;
+    private MidFunc func = CreateFun1();
+    private MidFunc2 func2 = CreateFun2();
 
-    public FibRec1()
+    private static MidFunc CreateFun1()
     {
         var builder = new MidFunc.Builder(MidType.I4, [MidType.I4]) { Name = "FibRec" };
         var l = builder.DefLabel();
-        func = builder
+        return builder
             .LdArg(0)
             .LdcX4(3)
             .Bge(MidPrimitive.I4, l)
@@ -33,6 +34,31 @@ public class FibRec1
             .Build();
     }
 
+    private static MidFunc2 CreateFun2()
+    {
+        var builder = new MidFunc2.Builder(new(MidType.I4, SigLoc.R0), [new(MidType.I4, SigLoc.R1)]) { Name = "FibRec" };
+        var l = builder.DefLabel("l");
+        return builder
+            .Emit(OpCode2.Ldc_R2_I4_3) //           r2 = 3
+            .Emit(OpCode2.BgeI_R1_R2, l) //         if (r1 >= r2) goto l
+            .Emit(OpCode2.Ldc_R0_I4_1) //           r0 = 1
+            .Emit(OpCode2.Ret) //                   ret
+            .MarkLabel(l) //                    l:
+            .Emit(OpCode2.Push_R1_X4) //            push(r1)
+            .Emit(OpCode2.Ldc_R2_I4_1) //           r2 = 1
+            .Emit(OpCode2.SubI_R1_R2_X4) //         r1 -= r2
+            .Emit(OpCode2.Call, builder) //         call => ret: r0; n: r1
+            .Emit(OpCode2.Pop_R2_X4) //             r2 = pop()
+            .Emit(OpCode2.Push_R0_X4) //            push(r0)
+            .Emit(OpCode2.Ldc_R1_X4, -2) //         r1 = -2
+            .Emit(OpCode2.AddI_R1_R2_X4) //         r1 += r2
+            .Emit(OpCode2.Call, builder) //         call => ret: r0; n: r1
+            .Emit(OpCode2.Pop_R2_X4) //             r2 = pop()
+            .Emit(OpCode2.AddI_R0_R2_X4) //         r0 += r2
+            .Emit(OpCode2.Ret) //                   ret
+            .Build();
+    }
+
     public int FibRec(int n)
     {
         if (n < 3) return 1;
@@ -44,4 +70,7 @@ public class FibRec1
 
     [Benchmark]
     public int Mid() => func.CallFunc<int, int>(8);
+
+    [Benchmark]
+    public int Mid2() => func2.CallFunc<int, int>(8);
 }

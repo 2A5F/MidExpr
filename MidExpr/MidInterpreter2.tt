@@ -55,30 +55,58 @@ using System.Runtime.Intrinsics;
 
 namespace MidExpr;
 
-public static unsafe class MidInterpreter2
+public static unsafe partial class MidInterpreter2
 {
-    public static void Exec(ushort[] codes, byte* stack)
+    public static void Exec(MidFunc2 root_func, ref Regs regs, byte* stack_data, Frame[] stack_frames)
     {
 <#
     for (var i = 0; i < regs; i++)
     {
 #>
-        Vector128<byte> r<#= i #> = default;
+        var r<#= i #> = regs.r<#= i #>;
 <#
     }
 #>
-        fixed (ushort* p_code = codes)
+
+        var func = root_func;
+        var frames = stack_frames;
+        var stack = stack_data;
+        var calc_stack = stack + func.m_all_local_size;
+        var frame_count = 0u;
+        var code_offset = 0u;
+
+    Re:
+        fixed (ushort* p_code = func.m_code)
         {
-            var code = p_code;
-            Next:
+            var code = p_code + code_offset;
+        Next:
             switch ((OpCode2)(*code))
             {
                 case OpCode2.Nop: code++; goto Next;
 
-                case OpCode2.Ret: throw new NotImplementedException("todo Ret");
+                case OpCode2.Ret:
+                {
+                    if (frame_count == 0) goto Ret;
+                    ref var frame = ref frames[--frame_count];
+                    func = frame.m_func;
+                    stack = frame.m_p_stack;
+                    calc_stack = frame.m_p_calc_stack;
+                    code_offset = frame.m_code_offset;
+                    frame.m_func = null!;
+                    goto Re;
+                }
 
-                case OpCode2.Call: throw new NotImplementedException("todo Call");
-                case OpCode2.CallInd: throw new NotImplementedException("todo CallInd");
+                case OpCode2.Call:
+                {
+                    ref var frame = ref frames[frame_count++];
+                    frame.m_func = func;
+                    frame.m_p_stack = stack;
+                    frame.m_p_calc_stack = calc_stack;
+                    frame.m_code_offset = (uint)(code - p_code + 2);
+                    func = func.m_fns[*(ushort*)(code + 1)];
+                    code_offset = 0;
+                    goto Re;
+                }
 
 <#
     for (var i = 0; i < regs; i++)
@@ -200,6 +228,35 @@ public static unsafe class MidInterpreter2
 #>
 
 <#
+    for (var i = 0; i < regs; i++)
+    {
+        foreach (var size in f_sizes)
+        {
+            var v_conv = GetVConv(size);
+            var p_conv = GetPConv(size);
+#>
+                case OpCode2.Push_R<#= i #>_X<#= size #>:
+                    *<#= p_conv #>calc_stack = r<#= i #><#= v_conv #>[0]; calc_stack += <#= size #>; code++; goto Next;
+<#
+        }
+    }
+#>
+
+<#
+    for (var i = 0; i < regs; i++)
+    {
+        foreach (var size in i_sizes)
+        {
+            var p_conv = GetPConv(size);
+#>
+                case OpCode2.Pop_R<#= i #>_X<#= size #>:
+                    calc_stack -= <#= Math.Max(size, 4) #>; r<#= i #> = Vector128.CreateScalar(*<#= p_conv #>calc_stack).AsByte(); code++; goto Next;
+<#
+        }
+    }
+#>
+
+<#
     for (var d = 0; d < regs; d++)
     {
         for (var s = 0; s < regs; s++)
@@ -208,7 +265,7 @@ public static unsafe class MidInterpreter2
             {
                 var mask = GetVMask(size);
 #>
-                case OpCode2.Mov_R<#= d #>_R<#= s #>_XR<#= size #>:
+                case OpCode2.Mov_R<#= d #>_R<#= s #>_X<#= size #>:
                     r<#= d #> = r<#= s #> & <#= mask #>; code++; goto Next;
 <#
             }
@@ -301,7 +358,7 @@ public static unsafe class MidInterpreter2
             {
 #>
                 case OpCode2.B<#= cmp #>I_R<#= d #>_R<#= s #>: // <op> <u2 op offset>
-                    code += r<#= d #>.AsUInt64()[0] <#= op #> r<#= s #>.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r<#= d #>.AsUInt64()[0] <#= op #> r<#= s #>.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
 <#
             }
         }
@@ -324,7 +381,7 @@ public static unsafe class MidInterpreter2
                 {
 #>
                 case OpCode2.B<#= cmp #>F<#= size #>_R<#= d #>_R<#= s #>: // <op> <u2 op offset>
-                    code += r<#= d #><#= v_conv #>[0] <#= op #> r<#= s #><#= v_conv #>[0] ? 2 : *(code + 1); goto Next;
+                    code += r<#= d #><#= v_conv #>[0] <#= op #> r<#= s #><#= v_conv #>[0] ? *(code + 1) : 2; goto Next;
 <#
                 }
             }
@@ -335,5 +392,15 @@ public static unsafe class MidInterpreter2
                     throw new ArgumentOutOfRangeException();
             }
         }
+
+    Ret:
+<#
+    for (var i = 0; i < regs; i++)
+    {
+#>
+        regs.r<#= i #> = r<#= i #>;
+<#
+    }
+#>
     }
 }

@@ -6,30 +6,58 @@ using System.Runtime.Intrinsics;
 
 namespace MidExpr;
 
-public static unsafe class MidInterpreter2
+public static unsafe partial class MidInterpreter2
 {
-    public static void Exec(ushort[] codes, byte* stack)
+    public static void Exec(MidFunc2 root_func, ref Regs regs, byte* stack_data, Frame[] stack_frames)
     {
-        Vector128<byte> r0 = default;
-        Vector128<byte> r1 = default;
-        Vector128<byte> r2 = default;
-        Vector128<byte> r3 = default;
-        Vector128<byte> r4 = default;
-        Vector128<byte> r5 = default;
-        Vector128<byte> r6 = default;
-        Vector128<byte> r7 = default;
-        fixed (ushort* p_code = codes)
+        var r0 = regs.r0;
+        var r1 = regs.r1;
+        var r2 = regs.r2;
+        var r3 = regs.r3;
+        var r4 = regs.r4;
+        var r5 = regs.r5;
+        var r6 = regs.r6;
+        var r7 = regs.r7;
+
+        var func = root_func;
+        var frames = stack_frames;
+        var stack = stack_data;
+        var calc_stack = stack + func.m_all_local_size;
+        var frame_count = 0u;
+        var code_offset = 0u;
+
+    Re:
+        fixed (ushort* p_code = func.m_code)
         {
-            var code = p_code;
-            Next:
+            var code = p_code + code_offset;
+        Next:
             switch ((OpCode2)(*code))
             {
                 case OpCode2.Nop: code++; goto Next;
 
-                case OpCode2.Ret: throw new NotImplementedException("todo Ret");
+                case OpCode2.Ret:
+                {
+                    if (frame_count == 0) goto Ret;
+                    ref var frame = ref frames[--frame_count];
+                    func = frame.m_func;
+                    stack = frame.m_p_stack;
+                    calc_stack = frame.m_p_calc_stack;
+                    code_offset = frame.m_code_offset;
+                    frame.m_func = null!;
+                    goto Re;
+                }
 
-                case OpCode2.Call: throw new NotImplementedException("todo Call");
-                case OpCode2.CallInd: throw new NotImplementedException("todo CallInd");
+                case OpCode2.Call:
+                {
+                    ref var frame = ref frames[frame_count++];
+                    frame.m_func = func;
+                    frame.m_p_stack = stack;
+                    frame.m_p_calc_stack = calc_stack;
+                    frame.m_code_offset = (uint)(code - p_code + 2);
+                    func = func.m_fns[*(ushort*)(code + 1)];
+                    code_offset = 0;
+                    goto Re;
+                }
 
                 case OpCode2.LdNull_R0: r0 = default; code++; goto Next;
                 case OpCode2.LdNull_R1: r1 = default; code++; goto Next;
@@ -1445,517 +1473,615 @@ public static unsafe class MidInterpreter2
                 case OpCode2.StInd_R7_R7_X8:
                     *(ulong*)r7.AsNUInt()[0] = r7.AsUInt64()[0]; code++; goto Next;
 
-                case OpCode2.Mov_R0_R0_XR1:
+                case OpCode2.Push_R0_X4:
+                    *(uint*)calc_stack = r0.AsUInt32()[0]; calc_stack += 4; code++; goto Next;
+                case OpCode2.Push_R0_X8:
+                    *(ulong*)calc_stack = r0.AsUInt64()[0]; calc_stack += 8; code++; goto Next;
+                case OpCode2.Push_R1_X4:
+                    *(uint*)calc_stack = r1.AsUInt32()[0]; calc_stack += 4; code++; goto Next;
+                case OpCode2.Push_R1_X8:
+                    *(ulong*)calc_stack = r1.AsUInt64()[0]; calc_stack += 8; code++; goto Next;
+                case OpCode2.Push_R2_X4:
+                    *(uint*)calc_stack = r2.AsUInt32()[0]; calc_stack += 4; code++; goto Next;
+                case OpCode2.Push_R2_X8:
+                    *(ulong*)calc_stack = r2.AsUInt64()[0]; calc_stack += 8; code++; goto Next;
+                case OpCode2.Push_R3_X4:
+                    *(uint*)calc_stack = r3.AsUInt32()[0]; calc_stack += 4; code++; goto Next;
+                case OpCode2.Push_R3_X8:
+                    *(ulong*)calc_stack = r3.AsUInt64()[0]; calc_stack += 8; code++; goto Next;
+                case OpCode2.Push_R4_X4:
+                    *(uint*)calc_stack = r4.AsUInt32()[0]; calc_stack += 4; code++; goto Next;
+                case OpCode2.Push_R4_X8:
+                    *(ulong*)calc_stack = r4.AsUInt64()[0]; calc_stack += 8; code++; goto Next;
+                case OpCode2.Push_R5_X4:
+                    *(uint*)calc_stack = r5.AsUInt32()[0]; calc_stack += 4; code++; goto Next;
+                case OpCode2.Push_R5_X8:
+                    *(ulong*)calc_stack = r5.AsUInt64()[0]; calc_stack += 8; code++; goto Next;
+                case OpCode2.Push_R6_X4:
+                    *(uint*)calc_stack = r6.AsUInt32()[0]; calc_stack += 4; code++; goto Next;
+                case OpCode2.Push_R6_X8:
+                    *(ulong*)calc_stack = r6.AsUInt64()[0]; calc_stack += 8; code++; goto Next;
+                case OpCode2.Push_R7_X4:
+                    *(uint*)calc_stack = r7.AsUInt32()[0]; calc_stack += 4; code++; goto Next;
+                case OpCode2.Push_R7_X8:
+                    *(ulong*)calc_stack = r7.AsUInt64()[0]; calc_stack += 8; code++; goto Next;
+
+                case OpCode2.Pop_R0_X1:
+                    calc_stack -= 4; r0 = Vector128.CreateScalar(*calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R0_X2:
+                    calc_stack -= 4; r0 = Vector128.CreateScalar(*(ushort*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R0_X4:
+                    calc_stack -= 4; r0 = Vector128.CreateScalar(*(uint*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R0_X8:
+                    calc_stack -= 8; r0 = Vector128.CreateScalar(*(ulong*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R1_X1:
+                    calc_stack -= 4; r1 = Vector128.CreateScalar(*calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R1_X2:
+                    calc_stack -= 4; r1 = Vector128.CreateScalar(*(ushort*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R1_X4:
+                    calc_stack -= 4; r1 = Vector128.CreateScalar(*(uint*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R1_X8:
+                    calc_stack -= 8; r1 = Vector128.CreateScalar(*(ulong*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R2_X1:
+                    calc_stack -= 4; r2 = Vector128.CreateScalar(*calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R2_X2:
+                    calc_stack -= 4; r2 = Vector128.CreateScalar(*(ushort*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R2_X4:
+                    calc_stack -= 4; r2 = Vector128.CreateScalar(*(uint*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R2_X8:
+                    calc_stack -= 8; r2 = Vector128.CreateScalar(*(ulong*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R3_X1:
+                    calc_stack -= 4; r3 = Vector128.CreateScalar(*calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R3_X2:
+                    calc_stack -= 4; r3 = Vector128.CreateScalar(*(ushort*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R3_X4:
+                    calc_stack -= 4; r3 = Vector128.CreateScalar(*(uint*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R3_X8:
+                    calc_stack -= 8; r3 = Vector128.CreateScalar(*(ulong*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R4_X1:
+                    calc_stack -= 4; r4 = Vector128.CreateScalar(*calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R4_X2:
+                    calc_stack -= 4; r4 = Vector128.CreateScalar(*(ushort*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R4_X4:
+                    calc_stack -= 4; r4 = Vector128.CreateScalar(*(uint*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R4_X8:
+                    calc_stack -= 8; r4 = Vector128.CreateScalar(*(ulong*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R5_X1:
+                    calc_stack -= 4; r5 = Vector128.CreateScalar(*calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R5_X2:
+                    calc_stack -= 4; r5 = Vector128.CreateScalar(*(ushort*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R5_X4:
+                    calc_stack -= 4; r5 = Vector128.CreateScalar(*(uint*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R5_X8:
+                    calc_stack -= 8; r5 = Vector128.CreateScalar(*(ulong*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R6_X1:
+                    calc_stack -= 4; r6 = Vector128.CreateScalar(*calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R6_X2:
+                    calc_stack -= 4; r6 = Vector128.CreateScalar(*(ushort*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R6_X4:
+                    calc_stack -= 4; r6 = Vector128.CreateScalar(*(uint*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R6_X8:
+                    calc_stack -= 8; r6 = Vector128.CreateScalar(*(ulong*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R7_X1:
+                    calc_stack -= 4; r7 = Vector128.CreateScalar(*calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R7_X2:
+                    calc_stack -= 4; r7 = Vector128.CreateScalar(*(ushort*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R7_X4:
+                    calc_stack -= 4; r7 = Vector128.CreateScalar(*(uint*)calc_stack).AsByte(); code++; goto Next;
+                case OpCode2.Pop_R7_X8:
+                    calc_stack -= 8; r7 = Vector128.CreateScalar(*(ulong*)calc_stack).AsByte(); code++; goto Next;
+
+                case OpCode2.Mov_R0_R0_X1:
                     r0 = r0 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R0_R0_XR2:
+                case OpCode2.Mov_R0_R0_X2:
                     r0 = r0 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R0_XR4:
+                case OpCode2.Mov_R0_R0_X4:
                     r0 = r0 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R0_XR8:
+                case OpCode2.Mov_R0_R0_X8:
                     r0 = r0 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R1_XR1:
+                case OpCode2.Mov_R0_R1_X1:
                     r0 = r1 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R0_R1_XR2:
+                case OpCode2.Mov_R0_R1_X2:
                     r0 = r1 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R1_XR4:
+                case OpCode2.Mov_R0_R1_X4:
                     r0 = r1 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R1_XR8:
+                case OpCode2.Mov_R0_R1_X8:
                     r0 = r1 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R2_XR1:
+                case OpCode2.Mov_R0_R2_X1:
                     r0 = r2 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R0_R2_XR2:
+                case OpCode2.Mov_R0_R2_X2:
                     r0 = r2 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R2_XR4:
+                case OpCode2.Mov_R0_R2_X4:
                     r0 = r2 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R2_XR8:
+                case OpCode2.Mov_R0_R2_X8:
                     r0 = r2 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R3_XR1:
+                case OpCode2.Mov_R0_R3_X1:
                     r0 = r3 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R0_R3_XR2:
+                case OpCode2.Mov_R0_R3_X2:
                     r0 = r3 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R3_XR4:
+                case OpCode2.Mov_R0_R3_X4:
                     r0 = r3 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R3_XR8:
+                case OpCode2.Mov_R0_R3_X8:
                     r0 = r3 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R4_XR1:
+                case OpCode2.Mov_R0_R4_X1:
                     r0 = r4 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R0_R4_XR2:
+                case OpCode2.Mov_R0_R4_X2:
                     r0 = r4 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R4_XR4:
+                case OpCode2.Mov_R0_R4_X4:
                     r0 = r4 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R4_XR8:
+                case OpCode2.Mov_R0_R4_X8:
                     r0 = r4 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R5_XR1:
+                case OpCode2.Mov_R0_R5_X1:
                     r0 = r5 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R0_R5_XR2:
+                case OpCode2.Mov_R0_R5_X2:
                     r0 = r5 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R5_XR4:
+                case OpCode2.Mov_R0_R5_X4:
                     r0 = r5 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R5_XR8:
+                case OpCode2.Mov_R0_R5_X8:
                     r0 = r5 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R6_XR1:
+                case OpCode2.Mov_R0_R6_X1:
                     r0 = r6 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R0_R6_XR2:
+                case OpCode2.Mov_R0_R6_X2:
                     r0 = r6 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R6_XR4:
+                case OpCode2.Mov_R0_R6_X4:
                     r0 = r6 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R6_XR8:
+                case OpCode2.Mov_R0_R6_X8:
                     r0 = r6 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R7_XR1:
+                case OpCode2.Mov_R0_R7_X1:
                     r0 = r7 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R0_R7_XR2:
+                case OpCode2.Mov_R0_R7_X2:
                     r0 = r7 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R7_XR4:
+                case OpCode2.Mov_R0_R7_X4:
                     r0 = r7 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R0_R7_XR8:
+                case OpCode2.Mov_R0_R7_X8:
                     r0 = r7 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R0_XR1:
+                case OpCode2.Mov_R1_R0_X1:
                     r1 = r0 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R1_R0_XR2:
+                case OpCode2.Mov_R1_R0_X2:
                     r1 = r0 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R0_XR4:
+                case OpCode2.Mov_R1_R0_X4:
                     r1 = r0 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R0_XR8:
+                case OpCode2.Mov_R1_R0_X8:
                     r1 = r0 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R1_XR1:
+                case OpCode2.Mov_R1_R1_X1:
                     r1 = r1 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R1_R1_XR2:
+                case OpCode2.Mov_R1_R1_X2:
                     r1 = r1 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R1_XR4:
+                case OpCode2.Mov_R1_R1_X4:
                     r1 = r1 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R1_XR8:
+                case OpCode2.Mov_R1_R1_X8:
                     r1 = r1 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R2_XR1:
+                case OpCode2.Mov_R1_R2_X1:
                     r1 = r2 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R1_R2_XR2:
+                case OpCode2.Mov_R1_R2_X2:
                     r1 = r2 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R2_XR4:
+                case OpCode2.Mov_R1_R2_X4:
                     r1 = r2 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R2_XR8:
+                case OpCode2.Mov_R1_R2_X8:
                     r1 = r2 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R3_XR1:
+                case OpCode2.Mov_R1_R3_X1:
                     r1 = r3 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R1_R3_XR2:
+                case OpCode2.Mov_R1_R3_X2:
                     r1 = r3 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R3_XR4:
+                case OpCode2.Mov_R1_R3_X4:
                     r1 = r3 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R3_XR8:
+                case OpCode2.Mov_R1_R3_X8:
                     r1 = r3 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R4_XR1:
+                case OpCode2.Mov_R1_R4_X1:
                     r1 = r4 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R1_R4_XR2:
+                case OpCode2.Mov_R1_R4_X2:
                     r1 = r4 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R4_XR4:
+                case OpCode2.Mov_R1_R4_X4:
                     r1 = r4 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R4_XR8:
+                case OpCode2.Mov_R1_R4_X8:
                     r1 = r4 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R5_XR1:
+                case OpCode2.Mov_R1_R5_X1:
                     r1 = r5 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R1_R5_XR2:
+                case OpCode2.Mov_R1_R5_X2:
                     r1 = r5 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R5_XR4:
+                case OpCode2.Mov_R1_R5_X4:
                     r1 = r5 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R5_XR8:
+                case OpCode2.Mov_R1_R5_X8:
                     r1 = r5 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R6_XR1:
+                case OpCode2.Mov_R1_R6_X1:
                     r1 = r6 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R1_R6_XR2:
+                case OpCode2.Mov_R1_R6_X2:
                     r1 = r6 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R6_XR4:
+                case OpCode2.Mov_R1_R6_X4:
                     r1 = r6 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R6_XR8:
+                case OpCode2.Mov_R1_R6_X8:
                     r1 = r6 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R7_XR1:
+                case OpCode2.Mov_R1_R7_X1:
                     r1 = r7 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R1_R7_XR2:
+                case OpCode2.Mov_R1_R7_X2:
                     r1 = r7 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R7_XR4:
+                case OpCode2.Mov_R1_R7_X4:
                     r1 = r7 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R1_R7_XR8:
+                case OpCode2.Mov_R1_R7_X8:
                     r1 = r7 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R0_XR1:
+                case OpCode2.Mov_R2_R0_X1:
                     r2 = r0 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R2_R0_XR2:
+                case OpCode2.Mov_R2_R0_X2:
                     r2 = r0 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R0_XR4:
+                case OpCode2.Mov_R2_R0_X4:
                     r2 = r0 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R0_XR8:
+                case OpCode2.Mov_R2_R0_X8:
                     r2 = r0 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R1_XR1:
+                case OpCode2.Mov_R2_R1_X1:
                     r2 = r1 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R2_R1_XR2:
+                case OpCode2.Mov_R2_R1_X2:
                     r2 = r1 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R1_XR4:
+                case OpCode2.Mov_R2_R1_X4:
                     r2 = r1 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R1_XR8:
+                case OpCode2.Mov_R2_R1_X8:
                     r2 = r1 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R2_XR1:
+                case OpCode2.Mov_R2_R2_X1:
                     r2 = r2 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R2_R2_XR2:
+                case OpCode2.Mov_R2_R2_X2:
                     r2 = r2 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R2_XR4:
+                case OpCode2.Mov_R2_R2_X4:
                     r2 = r2 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R2_XR8:
+                case OpCode2.Mov_R2_R2_X8:
                     r2 = r2 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R3_XR1:
+                case OpCode2.Mov_R2_R3_X1:
                     r2 = r3 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R2_R3_XR2:
+                case OpCode2.Mov_R2_R3_X2:
                     r2 = r3 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R3_XR4:
+                case OpCode2.Mov_R2_R3_X4:
                     r2 = r3 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R3_XR8:
+                case OpCode2.Mov_R2_R3_X8:
                     r2 = r3 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R4_XR1:
+                case OpCode2.Mov_R2_R4_X1:
                     r2 = r4 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R2_R4_XR2:
+                case OpCode2.Mov_R2_R4_X2:
                     r2 = r4 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R4_XR4:
+                case OpCode2.Mov_R2_R4_X4:
                     r2 = r4 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R4_XR8:
+                case OpCode2.Mov_R2_R4_X8:
                     r2 = r4 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R5_XR1:
+                case OpCode2.Mov_R2_R5_X1:
                     r2 = r5 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R2_R5_XR2:
+                case OpCode2.Mov_R2_R5_X2:
                     r2 = r5 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R5_XR4:
+                case OpCode2.Mov_R2_R5_X4:
                     r2 = r5 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R5_XR8:
+                case OpCode2.Mov_R2_R5_X8:
                     r2 = r5 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R6_XR1:
+                case OpCode2.Mov_R2_R6_X1:
                     r2 = r6 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R2_R6_XR2:
+                case OpCode2.Mov_R2_R6_X2:
                     r2 = r6 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R6_XR4:
+                case OpCode2.Mov_R2_R6_X4:
                     r2 = r6 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R6_XR8:
+                case OpCode2.Mov_R2_R6_X8:
                     r2 = r6 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R7_XR1:
+                case OpCode2.Mov_R2_R7_X1:
                     r2 = r7 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R2_R7_XR2:
+                case OpCode2.Mov_R2_R7_X2:
                     r2 = r7 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R7_XR4:
+                case OpCode2.Mov_R2_R7_X4:
                     r2 = r7 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R2_R7_XR8:
+                case OpCode2.Mov_R2_R7_X8:
                     r2 = r7 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R0_XR1:
+                case OpCode2.Mov_R3_R0_X1:
                     r3 = r0 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R3_R0_XR2:
+                case OpCode2.Mov_R3_R0_X2:
                     r3 = r0 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R0_XR4:
+                case OpCode2.Mov_R3_R0_X4:
                     r3 = r0 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R0_XR8:
+                case OpCode2.Mov_R3_R0_X8:
                     r3 = r0 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R1_XR1:
+                case OpCode2.Mov_R3_R1_X1:
                     r3 = r1 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R3_R1_XR2:
+                case OpCode2.Mov_R3_R1_X2:
                     r3 = r1 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R1_XR4:
+                case OpCode2.Mov_R3_R1_X4:
                     r3 = r1 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R1_XR8:
+                case OpCode2.Mov_R3_R1_X8:
                     r3 = r1 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R2_XR1:
+                case OpCode2.Mov_R3_R2_X1:
                     r3 = r2 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R3_R2_XR2:
+                case OpCode2.Mov_R3_R2_X2:
                     r3 = r2 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R2_XR4:
+                case OpCode2.Mov_R3_R2_X4:
                     r3 = r2 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R2_XR8:
+                case OpCode2.Mov_R3_R2_X8:
                     r3 = r2 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R3_XR1:
+                case OpCode2.Mov_R3_R3_X1:
                     r3 = r3 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R3_R3_XR2:
+                case OpCode2.Mov_R3_R3_X2:
                     r3 = r3 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R3_XR4:
+                case OpCode2.Mov_R3_R3_X4:
                     r3 = r3 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R3_XR8:
+                case OpCode2.Mov_R3_R3_X8:
                     r3 = r3 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R4_XR1:
+                case OpCode2.Mov_R3_R4_X1:
                     r3 = r4 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R3_R4_XR2:
+                case OpCode2.Mov_R3_R4_X2:
                     r3 = r4 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R4_XR4:
+                case OpCode2.Mov_R3_R4_X4:
                     r3 = r4 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R4_XR8:
+                case OpCode2.Mov_R3_R4_X8:
                     r3 = r4 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R5_XR1:
+                case OpCode2.Mov_R3_R5_X1:
                     r3 = r5 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R3_R5_XR2:
+                case OpCode2.Mov_R3_R5_X2:
                     r3 = r5 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R5_XR4:
+                case OpCode2.Mov_R3_R5_X4:
                     r3 = r5 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R5_XR8:
+                case OpCode2.Mov_R3_R5_X8:
                     r3 = r5 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R6_XR1:
+                case OpCode2.Mov_R3_R6_X1:
                     r3 = r6 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R3_R6_XR2:
+                case OpCode2.Mov_R3_R6_X2:
                     r3 = r6 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R6_XR4:
+                case OpCode2.Mov_R3_R6_X4:
                     r3 = r6 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R6_XR8:
+                case OpCode2.Mov_R3_R6_X8:
                     r3 = r6 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R7_XR1:
+                case OpCode2.Mov_R3_R7_X1:
                     r3 = r7 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R3_R7_XR2:
+                case OpCode2.Mov_R3_R7_X2:
                     r3 = r7 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R7_XR4:
+                case OpCode2.Mov_R3_R7_X4:
                     r3 = r7 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R3_R7_XR8:
+                case OpCode2.Mov_R3_R7_X8:
                     r3 = r7 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R0_XR1:
+                case OpCode2.Mov_R4_R0_X1:
                     r4 = r0 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R4_R0_XR2:
+                case OpCode2.Mov_R4_R0_X2:
                     r4 = r0 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R0_XR4:
+                case OpCode2.Mov_R4_R0_X4:
                     r4 = r0 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R0_XR8:
+                case OpCode2.Mov_R4_R0_X8:
                     r4 = r0 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R1_XR1:
+                case OpCode2.Mov_R4_R1_X1:
                     r4 = r1 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R4_R1_XR2:
+                case OpCode2.Mov_R4_R1_X2:
                     r4 = r1 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R1_XR4:
+                case OpCode2.Mov_R4_R1_X4:
                     r4 = r1 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R1_XR8:
+                case OpCode2.Mov_R4_R1_X8:
                     r4 = r1 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R2_XR1:
+                case OpCode2.Mov_R4_R2_X1:
                     r4 = r2 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R4_R2_XR2:
+                case OpCode2.Mov_R4_R2_X2:
                     r4 = r2 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R2_XR4:
+                case OpCode2.Mov_R4_R2_X4:
                     r4 = r2 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R2_XR8:
+                case OpCode2.Mov_R4_R2_X8:
                     r4 = r2 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R3_XR1:
+                case OpCode2.Mov_R4_R3_X1:
                     r4 = r3 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R4_R3_XR2:
+                case OpCode2.Mov_R4_R3_X2:
                     r4 = r3 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R3_XR4:
+                case OpCode2.Mov_R4_R3_X4:
                     r4 = r3 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R3_XR8:
+                case OpCode2.Mov_R4_R3_X8:
                     r4 = r3 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R4_XR1:
+                case OpCode2.Mov_R4_R4_X1:
                     r4 = r4 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R4_R4_XR2:
+                case OpCode2.Mov_R4_R4_X2:
                     r4 = r4 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R4_XR4:
+                case OpCode2.Mov_R4_R4_X4:
                     r4 = r4 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R4_XR8:
+                case OpCode2.Mov_R4_R4_X8:
                     r4 = r4 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R5_XR1:
+                case OpCode2.Mov_R4_R5_X1:
                     r4 = r5 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R4_R5_XR2:
+                case OpCode2.Mov_R4_R5_X2:
                     r4 = r5 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R5_XR4:
+                case OpCode2.Mov_R4_R5_X4:
                     r4 = r5 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R5_XR8:
+                case OpCode2.Mov_R4_R5_X8:
                     r4 = r5 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R6_XR1:
+                case OpCode2.Mov_R4_R6_X1:
                     r4 = r6 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R4_R6_XR2:
+                case OpCode2.Mov_R4_R6_X2:
                     r4 = r6 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R6_XR4:
+                case OpCode2.Mov_R4_R6_X4:
                     r4 = r6 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R6_XR8:
+                case OpCode2.Mov_R4_R6_X8:
                     r4 = r6 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R7_XR1:
+                case OpCode2.Mov_R4_R7_X1:
                     r4 = r7 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R4_R7_XR2:
+                case OpCode2.Mov_R4_R7_X2:
                     r4 = r7 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R7_XR4:
+                case OpCode2.Mov_R4_R7_X4:
                     r4 = r7 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R4_R7_XR8:
+                case OpCode2.Mov_R4_R7_X8:
                     r4 = r7 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R0_XR1:
+                case OpCode2.Mov_R5_R0_X1:
                     r5 = r0 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R5_R0_XR2:
+                case OpCode2.Mov_R5_R0_X2:
                     r5 = r0 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R0_XR4:
+                case OpCode2.Mov_R5_R0_X4:
                     r5 = r0 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R0_XR8:
+                case OpCode2.Mov_R5_R0_X8:
                     r5 = r0 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R1_XR1:
+                case OpCode2.Mov_R5_R1_X1:
                     r5 = r1 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R5_R1_XR2:
+                case OpCode2.Mov_R5_R1_X2:
                     r5 = r1 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R1_XR4:
+                case OpCode2.Mov_R5_R1_X4:
                     r5 = r1 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R1_XR8:
+                case OpCode2.Mov_R5_R1_X8:
                     r5 = r1 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R2_XR1:
+                case OpCode2.Mov_R5_R2_X1:
                     r5 = r2 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R5_R2_XR2:
+                case OpCode2.Mov_R5_R2_X2:
                     r5 = r2 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R2_XR4:
+                case OpCode2.Mov_R5_R2_X4:
                     r5 = r2 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R2_XR8:
+                case OpCode2.Mov_R5_R2_X8:
                     r5 = r2 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R3_XR1:
+                case OpCode2.Mov_R5_R3_X1:
                     r5 = r3 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R5_R3_XR2:
+                case OpCode2.Mov_R5_R3_X2:
                     r5 = r3 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R3_XR4:
+                case OpCode2.Mov_R5_R3_X4:
                     r5 = r3 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R3_XR8:
+                case OpCode2.Mov_R5_R3_X8:
                     r5 = r3 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R4_XR1:
+                case OpCode2.Mov_R5_R4_X1:
                     r5 = r4 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R5_R4_XR2:
+                case OpCode2.Mov_R5_R4_X2:
                     r5 = r4 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R4_XR4:
+                case OpCode2.Mov_R5_R4_X4:
                     r5 = r4 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R4_XR8:
+                case OpCode2.Mov_R5_R4_X8:
                     r5 = r4 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R5_XR1:
+                case OpCode2.Mov_R5_R5_X1:
                     r5 = r5 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R5_R5_XR2:
+                case OpCode2.Mov_R5_R5_X2:
                     r5 = r5 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R5_XR4:
+                case OpCode2.Mov_R5_R5_X4:
                     r5 = r5 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R5_XR8:
+                case OpCode2.Mov_R5_R5_X8:
                     r5 = r5 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R6_XR1:
+                case OpCode2.Mov_R5_R6_X1:
                     r5 = r6 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R5_R6_XR2:
+                case OpCode2.Mov_R5_R6_X2:
                     r5 = r6 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R6_XR4:
+                case OpCode2.Mov_R5_R6_X4:
                     r5 = r6 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R6_XR8:
+                case OpCode2.Mov_R5_R6_X8:
                     r5 = r6 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R7_XR1:
+                case OpCode2.Mov_R5_R7_X1:
                     r5 = r7 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R5_R7_XR2:
+                case OpCode2.Mov_R5_R7_X2:
                     r5 = r7 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R7_XR4:
+                case OpCode2.Mov_R5_R7_X4:
                     r5 = r7 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R5_R7_XR8:
+                case OpCode2.Mov_R5_R7_X8:
                     r5 = r7 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R0_XR1:
+                case OpCode2.Mov_R6_R0_X1:
                     r6 = r0 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R6_R0_XR2:
+                case OpCode2.Mov_R6_R0_X2:
                     r6 = r0 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R0_XR4:
+                case OpCode2.Mov_R6_R0_X4:
                     r6 = r0 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R0_XR8:
+                case OpCode2.Mov_R6_R0_X8:
                     r6 = r0 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R1_XR1:
+                case OpCode2.Mov_R6_R1_X1:
                     r6 = r1 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R6_R1_XR2:
+                case OpCode2.Mov_R6_R1_X2:
                     r6 = r1 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R1_XR4:
+                case OpCode2.Mov_R6_R1_X4:
                     r6 = r1 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R1_XR8:
+                case OpCode2.Mov_R6_R1_X8:
                     r6 = r1 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R2_XR1:
+                case OpCode2.Mov_R6_R2_X1:
                     r6 = r2 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R6_R2_XR2:
+                case OpCode2.Mov_R6_R2_X2:
                     r6 = r2 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R2_XR4:
+                case OpCode2.Mov_R6_R2_X4:
                     r6 = r2 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R2_XR8:
+                case OpCode2.Mov_R6_R2_X8:
                     r6 = r2 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R3_XR1:
+                case OpCode2.Mov_R6_R3_X1:
                     r6 = r3 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R6_R3_XR2:
+                case OpCode2.Mov_R6_R3_X2:
                     r6 = r3 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R3_XR4:
+                case OpCode2.Mov_R6_R3_X4:
                     r6 = r3 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R3_XR8:
+                case OpCode2.Mov_R6_R3_X8:
                     r6 = r3 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R4_XR1:
+                case OpCode2.Mov_R6_R4_X1:
                     r6 = r4 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R6_R4_XR2:
+                case OpCode2.Mov_R6_R4_X2:
                     r6 = r4 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R4_XR4:
+                case OpCode2.Mov_R6_R4_X4:
                     r6 = r4 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R4_XR8:
+                case OpCode2.Mov_R6_R4_X8:
                     r6 = r4 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R5_XR1:
+                case OpCode2.Mov_R6_R5_X1:
                     r6 = r5 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R6_R5_XR2:
+                case OpCode2.Mov_R6_R5_X2:
                     r6 = r5 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R5_XR4:
+                case OpCode2.Mov_R6_R5_X4:
                     r6 = r5 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R5_XR8:
+                case OpCode2.Mov_R6_R5_X8:
                     r6 = r5 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R6_XR1:
+                case OpCode2.Mov_R6_R6_X1:
                     r6 = r6 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R6_R6_XR2:
+                case OpCode2.Mov_R6_R6_X2:
                     r6 = r6 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R6_XR4:
+                case OpCode2.Mov_R6_R6_X4:
                     r6 = r6 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R6_XR8:
+                case OpCode2.Mov_R6_R6_X8:
                     r6 = r6 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R7_XR1:
+                case OpCode2.Mov_R6_R7_X1:
                     r6 = r7 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R6_R7_XR2:
+                case OpCode2.Mov_R6_R7_X2:
                     r6 = r7 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R7_XR4:
+                case OpCode2.Mov_R6_R7_X4:
                     r6 = r7 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R6_R7_XR8:
+                case OpCode2.Mov_R6_R7_X8:
                     r6 = r7 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R0_XR1:
+                case OpCode2.Mov_R7_R0_X1:
                     r7 = r0 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R7_R0_XR2:
+                case OpCode2.Mov_R7_R0_X2:
                     r7 = r0 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R0_XR4:
+                case OpCode2.Mov_R7_R0_X4:
                     r7 = r0 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R0_XR8:
+                case OpCode2.Mov_R7_R0_X8:
                     r7 = r0 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R1_XR1:
+                case OpCode2.Mov_R7_R1_X1:
                     r7 = r1 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R7_R1_XR2:
+                case OpCode2.Mov_R7_R1_X2:
                     r7 = r1 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R1_XR4:
+                case OpCode2.Mov_R7_R1_X4:
                     r7 = r1 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R1_XR8:
+                case OpCode2.Mov_R7_R1_X8:
                     r7 = r1 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R2_XR1:
+                case OpCode2.Mov_R7_R2_X1:
                     r7 = r2 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R7_R2_XR2:
+                case OpCode2.Mov_R7_R2_X2:
                     r7 = r2 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R2_XR4:
+                case OpCode2.Mov_R7_R2_X4:
                     r7 = r2 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R2_XR8:
+                case OpCode2.Mov_R7_R2_X8:
                     r7 = r2 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R3_XR1:
+                case OpCode2.Mov_R7_R3_X1:
                     r7 = r3 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R7_R3_XR2:
+                case OpCode2.Mov_R7_R3_X2:
                     r7 = r3 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R3_XR4:
+                case OpCode2.Mov_R7_R3_X4:
                     r7 = r3 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R3_XR8:
+                case OpCode2.Mov_R7_R3_X8:
                     r7 = r3 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R4_XR1:
+                case OpCode2.Mov_R7_R4_X1:
                     r7 = r4 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R7_R4_XR2:
+                case OpCode2.Mov_R7_R4_X2:
                     r7 = r4 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R4_XR4:
+                case OpCode2.Mov_R7_R4_X4:
                     r7 = r4 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R4_XR8:
+                case OpCode2.Mov_R7_R4_X8:
                     r7 = r4 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R5_XR1:
+                case OpCode2.Mov_R7_R5_X1:
                     r7 = r5 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R7_R5_XR2:
+                case OpCode2.Mov_R7_R5_X2:
                     r7 = r5 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R5_XR4:
+                case OpCode2.Mov_R7_R5_X4:
                     r7 = r5 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R5_XR8:
+                case OpCode2.Mov_R7_R5_X8:
                     r7 = r5 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R6_XR1:
+                case OpCode2.Mov_R7_R6_X1:
                     r7 = r6 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R7_R6_XR2:
+                case OpCode2.Mov_R7_R6_X2:
                     r7 = r6 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R6_XR4:
+                case OpCode2.Mov_R7_R6_X4:
                     r7 = r6 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R6_XR8:
+                case OpCode2.Mov_R7_R6_X8:
                     r7 = r6 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R7_XR1:
+                case OpCode2.Mov_R7_R7_X1:
                     r7 = r7 & Vector128.CreateScalar(byte.MaxValue); code++; goto Next;
-                case OpCode2.Mov_R7_R7_XR2:
+                case OpCode2.Mov_R7_R7_X2:
                     r7 = r7 & Vector128.CreateScalar(ushort.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R7_XR4:
+                case OpCode2.Mov_R7_R7_X4:
                     r7 = r7 & Vector128.CreateScalar(uint.MaxValue).AsByte(); code++; goto Next;
-                case OpCode2.Mov_R7_R7_XR8:
+                case OpCode2.Mov_R7_R7_X8:
                     r7 = r7 & Vector128.CreateScalar(ulong.MaxValue).AsByte(); code++; goto Next;
 
                 case OpCode2.AddI_R0_R0_X1:
@@ -7156,2329 +7282,2339 @@ public static unsafe class MidInterpreter2
                     code += r7 != default ? 2 : *(code + 1); goto Next;
 
                 case OpCode2.BeqI_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] == r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] == r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] == r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] == r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] == r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] == r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] == r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] == r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] == r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] == r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] == r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] == r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] == r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] == r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] == r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] == r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] == r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] == r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] == r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] == r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] == r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] == r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] == r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] == r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] == r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] == r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] == r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] == r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] == r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] == r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] == r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] == r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] == r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] == r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] == r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] == r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] == r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] == r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] == r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] == r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] == r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] == r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] == r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] == r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] == r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] == r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] == r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] == r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] == r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] == r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] == r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] == r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] == r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] == r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] == r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] == r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] == r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] == r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] == r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] == r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] == r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] == r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] == r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] == r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] == r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] == r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] == r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] == r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] == r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] == r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] == r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] == r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] == r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] == r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] == r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] == r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] == r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] == r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] == r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] == r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] == r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] == r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] == r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] == r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] == r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] == r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] == r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] == r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] == r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] == r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] == r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] == r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] == r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] == r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] == r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] == r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] == r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] == r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] == r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] == r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] == r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] == r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] == r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] == r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] == r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] == r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] == r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] == r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] == r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] == r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] == r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] == r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] == r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] == r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] == r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] == r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] == r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] == r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] == r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] == r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] == r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] == r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] == r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] == r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] == r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] == r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqI_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] == r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] == r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BneI_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] != r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] != r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] != r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] != r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] != r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] != r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] != r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] != r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] != r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] != r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] != r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] != r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] != r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] != r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] != r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] != r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] != r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] != r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] != r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] != r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] != r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] != r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] != r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] != r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] != r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] != r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] != r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] != r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] != r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] != r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] != r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] != r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] != r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] != r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] != r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] != r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] != r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] != r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] != r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] != r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] != r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] != r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] != r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] != r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] != r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] != r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] != r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] != r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] != r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] != r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] != r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] != r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] != r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] != r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] != r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] != r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] != r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] != r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] != r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] != r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] != r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] != r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] != r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] != r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] != r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] != r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] != r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] != r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] != r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] != r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] != r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] != r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] != r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] != r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] != r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] != r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] != r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] != r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] != r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] != r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] != r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] != r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] != r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] != r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] != r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] != r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] != r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] != r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] != r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] != r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] != r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] != r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] != r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] != r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] != r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] != r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] != r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] != r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] != r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] != r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] != r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] != r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] != r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] != r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] != r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] != r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] != r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] != r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] != r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] != r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] != r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] != r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] != r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] != r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] != r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] != r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] != r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] != r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] != r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] != r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] != r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] != r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] != r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] != r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] != r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] != r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneI_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] != r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] != r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BltI_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] < r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] < r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] < r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] < r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] < r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] < r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] < r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] < r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] < r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] < r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] < r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] < r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] < r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] < r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] < r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] < r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] < r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] < r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] < r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] < r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] < r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] < r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] < r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] < r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] < r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] < r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] < r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] < r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] < r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] < r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] < r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] < r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] < r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] < r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] < r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] < r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] < r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] < r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] < r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] < r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] < r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] < r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] < r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] < r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] < r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] < r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] < r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] < r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] < r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] < r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] < r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] < r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] < r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] < r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] < r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] < r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] < r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] < r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] < r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] < r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] < r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] < r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] < r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] < r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] < r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] < r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] < r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] < r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] < r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] < r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] < r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] < r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] < r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] < r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] < r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] < r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] < r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] < r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] < r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] < r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] < r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] < r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] < r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] < r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] < r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] < r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] < r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] < r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] < r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] < r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] < r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] < r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] < r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] < r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] < r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] < r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] < r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] < r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] < r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] < r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] < r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] < r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] < r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] < r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] < r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] < r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] < r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] < r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] < r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] < r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] < r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] < r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] < r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] < r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] < r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] < r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] < r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] < r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] < r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] < r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] < r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] < r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] < r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] < r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] < r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] < r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltI_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] < r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] < r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BgtI_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] > r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] > r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] > r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] > r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] > r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] > r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] > r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] > r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] > r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] > r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] > r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] > r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] > r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] > r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] > r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] > r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] > r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] > r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] > r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] > r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] > r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] > r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] > r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] > r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] > r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] > r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] > r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] > r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] > r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] > r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] > r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] > r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] > r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] > r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] > r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] > r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] > r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] > r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] > r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] > r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] > r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] > r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] > r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] > r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] > r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] > r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] > r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] > r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] > r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] > r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] > r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] > r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] > r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] > r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] > r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] > r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] > r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] > r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] > r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] > r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] > r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] > r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] > r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] > r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] > r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] > r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] > r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] > r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] > r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] > r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] > r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] > r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] > r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] > r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] > r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] > r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] > r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] > r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] > r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] > r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] > r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] > r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] > r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] > r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] > r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] > r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] > r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] > r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] > r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] > r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] > r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] > r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] > r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] > r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] > r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] > r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] > r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] > r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] > r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] > r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] > r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] > r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] > r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] > r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] > r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] > r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] > r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] > r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] > r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] > r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] > r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] > r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] > r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] > r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] > r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] > r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] > r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] > r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] > r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] > r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] > r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] > r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] > r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] > r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] > r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] > r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtI_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] > r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] > r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BleI_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] <= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] <= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] <= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] <= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] <= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] <= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] <= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] <= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] <= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] <= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] <= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] <= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] <= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] <= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] <= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] <= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] <= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] <= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] <= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] <= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] <= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] <= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] <= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] <= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] <= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] <= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] <= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] <= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] <= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] <= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] <= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] <= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] <= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] <= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] <= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] <= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] <= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] <= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] <= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] <= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] <= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] <= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] <= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] <= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] <= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] <= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] <= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] <= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] <= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] <= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] <= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] <= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] <= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] <= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] <= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] <= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] <= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] <= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] <= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] <= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] <= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] <= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] <= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] <= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] <= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] <= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] <= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] <= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] <= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] <= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] <= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] <= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] <= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] <= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] <= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] <= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] <= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] <= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] <= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] <= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] <= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] <= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] <= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] <= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] <= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] <= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] <= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] <= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] <= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] <= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] <= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] <= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] <= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] <= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] <= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] <= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] <= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] <= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] <= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] <= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] <= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] <= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] <= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] <= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] <= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] <= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] <= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] <= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] <= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] <= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] <= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] <= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] <= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] <= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] <= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] <= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] <= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] <= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] <= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] <= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] <= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] <= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] <= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] <= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] <= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] <= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleI_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] <= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] <= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BgeI_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] >= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] >= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] >= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] >= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] >= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] >= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] >= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] >= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] >= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] >= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] >= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] >= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] >= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] >= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsUInt64()[0] >= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsUInt64()[0] >= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] >= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] >= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] >= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] >= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] >= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] >= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] >= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] >= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] >= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] >= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] >= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] >= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] >= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] >= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsUInt64()[0] >= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsUInt64()[0] >= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] >= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] >= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] >= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] >= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] >= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] >= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] >= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] >= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] >= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] >= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] >= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] >= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] >= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] >= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsUInt64()[0] >= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsUInt64()[0] >= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] >= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] >= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] >= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] >= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] >= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] >= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] >= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] >= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] >= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] >= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] >= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] >= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] >= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] >= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsUInt64()[0] >= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsUInt64()[0] >= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] >= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] >= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] >= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] >= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] >= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] >= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] >= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] >= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] >= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] >= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] >= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] >= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] >= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] >= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsUInt64()[0] >= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsUInt64()[0] >= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] >= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] >= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] >= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] >= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] >= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] >= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] >= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] >= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] >= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] >= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] >= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] >= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] >= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] >= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsUInt64()[0] >= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsUInt64()[0] >= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] >= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] >= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] >= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] >= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] >= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] >= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] >= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] >= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] >= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] >= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] >= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] >= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] >= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] >= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsUInt64()[0] >= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsUInt64()[0] >= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] >= r0.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] >= r0.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] >= r1.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] >= r1.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] >= r2.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] >= r2.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] >= r3.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] >= r3.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] >= r4.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] >= r4.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] >= r5.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] >= r5.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] >= r6.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] >= r6.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeI_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsUInt64()[0] >= r7.AsUInt64()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsUInt64()[0] >= r7.AsUInt64()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BeqF4_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] == r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] == r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] == r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] == r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] == r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] == r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] == r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] == r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] == r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] == r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] == r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] == r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] == r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] == r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] == r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] == r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] == r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] == r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] == r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] == r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] == r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] == r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] == r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] == r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] == r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] == r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] == r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] == r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] == r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] == r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] == r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] == r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] == r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] == r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] == r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] == r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] == r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] == r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] == r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] == r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] == r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] == r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] == r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] == r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] == r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] == r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] == r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] == r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] == r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] == r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] == r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] == r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] == r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] == r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] == r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] == r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] == r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] == r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] == r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] == r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] == r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] == r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] == r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] == r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] == r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] == r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] == r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] == r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] == r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] == r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] == r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] == r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] == r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] == r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] == r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] == r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] == r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] == r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] == r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] == r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] == r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] == r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] == r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] == r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] == r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] == r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] == r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] == r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] == r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] == r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] == r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] == r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] == r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] == r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] == r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] == r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] == r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] == r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] == r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] == r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] == r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] == r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] == r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] == r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] == r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] == r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] == r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] == r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] == r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] == r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] == r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] == r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] == r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] == r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] == r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] == r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] == r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] == r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] == r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] == r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] == r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] == r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] == r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] == r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] == r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] == r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF4_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] == r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] == r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BneF4_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] != r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] != r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] != r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] != r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] != r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] != r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] != r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] != r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] != r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] != r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] != r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] != r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] != r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] != r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] != r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] != r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] != r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] != r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] != r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] != r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] != r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] != r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] != r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] != r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] != r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] != r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] != r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] != r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] != r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] != r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] != r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] != r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] != r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] != r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] != r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] != r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] != r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] != r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] != r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] != r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] != r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] != r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] != r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] != r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] != r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] != r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] != r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] != r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] != r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] != r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] != r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] != r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] != r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] != r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] != r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] != r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] != r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] != r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] != r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] != r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] != r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] != r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] != r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] != r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] != r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] != r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] != r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] != r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] != r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] != r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] != r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] != r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] != r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] != r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] != r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] != r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] != r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] != r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] != r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] != r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] != r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] != r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] != r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] != r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] != r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] != r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] != r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] != r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] != r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] != r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] != r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] != r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] != r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] != r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] != r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] != r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] != r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] != r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] != r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] != r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] != r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] != r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] != r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] != r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] != r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] != r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] != r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] != r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] != r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] != r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] != r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] != r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] != r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] != r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] != r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] != r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] != r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] != r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] != r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] != r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] != r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] != r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] != r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] != r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] != r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] != r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF4_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] != r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] != r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BltF4_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] < r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] < r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] < r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] < r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] < r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] < r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] < r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] < r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] < r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] < r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] < r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] < r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] < r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] < r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] < r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] < r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] < r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] < r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] < r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] < r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] < r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] < r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] < r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] < r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] < r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] < r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] < r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] < r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] < r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] < r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] < r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] < r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] < r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] < r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] < r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] < r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] < r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] < r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] < r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] < r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] < r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] < r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] < r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] < r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] < r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] < r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] < r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] < r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] < r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] < r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] < r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] < r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] < r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] < r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] < r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] < r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] < r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] < r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] < r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] < r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] < r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] < r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] < r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] < r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] < r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] < r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] < r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] < r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] < r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] < r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] < r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] < r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] < r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] < r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] < r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] < r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] < r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] < r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] < r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] < r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] < r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] < r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] < r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] < r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] < r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] < r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] < r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] < r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] < r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] < r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] < r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] < r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] < r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] < r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] < r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] < r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] < r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] < r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] < r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] < r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] < r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] < r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] < r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] < r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] < r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] < r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] < r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] < r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] < r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] < r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] < r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] < r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] < r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] < r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] < r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] < r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] < r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] < r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] < r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] < r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] < r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] < r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] < r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] < r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] < r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] < r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF4_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] < r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] < r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BgtF4_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] > r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] > r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] > r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] > r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] > r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] > r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] > r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] > r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] > r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] > r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] > r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] > r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] > r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] > r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] > r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] > r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] > r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] > r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] > r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] > r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] > r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] > r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] > r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] > r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] > r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] > r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] > r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] > r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] > r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] > r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] > r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] > r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] > r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] > r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] > r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] > r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] > r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] > r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] > r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] > r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] > r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] > r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] > r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] > r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] > r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] > r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] > r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] > r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] > r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] > r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] > r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] > r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] > r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] > r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] > r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] > r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] > r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] > r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] > r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] > r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] > r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] > r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] > r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] > r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] > r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] > r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] > r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] > r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] > r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] > r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] > r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] > r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] > r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] > r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] > r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] > r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] > r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] > r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] > r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] > r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] > r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] > r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] > r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] > r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] > r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] > r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] > r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] > r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] > r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] > r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] > r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] > r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] > r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] > r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] > r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] > r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] > r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] > r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] > r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] > r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] > r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] > r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] > r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] > r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] > r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] > r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] > r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] > r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] > r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] > r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] > r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] > r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] > r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] > r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] > r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] > r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] > r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] > r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] > r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] > r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] > r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] > r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] > r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] > r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] > r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] > r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF4_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] > r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] > r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BleF4_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] <= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] <= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] <= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] <= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] <= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] <= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] <= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] <= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] <= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] <= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] <= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] <= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] <= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] <= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] <= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] <= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] <= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] <= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] <= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] <= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] <= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] <= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] <= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] <= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] <= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] <= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] <= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] <= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] <= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] <= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] <= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] <= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] <= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] <= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] <= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] <= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] <= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] <= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] <= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] <= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] <= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] <= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] <= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] <= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] <= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] <= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] <= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] <= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] <= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] <= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] <= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] <= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] <= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] <= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] <= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] <= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] <= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] <= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] <= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] <= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] <= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] <= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] <= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] <= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] <= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] <= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] <= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] <= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] <= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] <= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] <= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] <= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] <= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] <= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] <= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] <= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] <= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] <= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] <= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] <= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] <= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] <= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] <= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] <= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] <= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] <= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] <= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] <= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] <= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] <= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] <= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] <= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] <= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] <= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] <= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] <= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] <= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] <= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] <= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] <= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] <= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] <= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] <= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] <= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] <= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] <= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] <= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] <= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] <= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] <= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] <= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] <= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] <= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] <= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] <= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] <= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] <= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] <= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] <= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] <= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] <= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] <= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] <= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] <= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] <= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] <= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF4_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] <= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] <= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BgeF4_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] >= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] >= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] >= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] >= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] >= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] >= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] >= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] >= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] >= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] >= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] >= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] >= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] >= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] >= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsSingle()[0] >= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsSingle()[0] >= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] >= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] >= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] >= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] >= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] >= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] >= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] >= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] >= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] >= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] >= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] >= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] >= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] >= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] >= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsSingle()[0] >= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsSingle()[0] >= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] >= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] >= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] >= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] >= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] >= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] >= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] >= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] >= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] >= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] >= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] >= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] >= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] >= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] >= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsSingle()[0] >= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsSingle()[0] >= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] >= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] >= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] >= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] >= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] >= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] >= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] >= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] >= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] >= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] >= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] >= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] >= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] >= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] >= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsSingle()[0] >= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsSingle()[0] >= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] >= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] >= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] >= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] >= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] >= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] >= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] >= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] >= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] >= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] >= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] >= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] >= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] >= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] >= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsSingle()[0] >= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsSingle()[0] >= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] >= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] >= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] >= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] >= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] >= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] >= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] >= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] >= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] >= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] >= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] >= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] >= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] >= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] >= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsSingle()[0] >= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsSingle()[0] >= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] >= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] >= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] >= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] >= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] >= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] >= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] >= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] >= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] >= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] >= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] >= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] >= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] >= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] >= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsSingle()[0] >= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsSingle()[0] >= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] >= r0.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] >= r0.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] >= r1.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] >= r1.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] >= r2.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] >= r2.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] >= r3.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] >= r3.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] >= r4.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] >= r4.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] >= r5.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] >= r5.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] >= r6.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] >= r6.AsSingle()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF4_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsSingle()[0] >= r7.AsSingle()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsSingle()[0] >= r7.AsSingle()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BeqF8_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] == r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] == r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] == r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] == r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] == r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] == r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] == r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] == r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] == r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] == r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] == r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] == r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] == r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] == r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] == r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] == r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] == r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] == r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] == r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] == r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] == r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] == r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] == r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] == r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] == r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] == r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] == r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] == r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] == r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] == r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] == r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] == r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] == r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] == r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] == r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] == r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] == r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] == r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] == r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] == r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] == r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] == r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] == r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] == r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] == r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] == r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] == r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] == r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] == r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] == r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] == r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] == r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] == r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] == r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] == r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] == r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] == r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] == r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] == r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] == r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] == r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] == r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] == r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] == r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] == r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] == r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] == r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] == r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] == r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] == r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] == r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] == r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] == r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] == r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] == r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] == r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] == r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] == r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] == r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] == r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] == r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] == r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] == r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] == r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] == r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] == r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] == r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] == r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] == r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] == r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] == r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] == r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] == r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] == r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] == r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] == r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] == r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] == r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] == r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] == r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] == r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] == r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] == r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] == r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] == r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] == r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] == r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] == r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] == r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] == r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] == r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] == r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] == r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] == r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] == r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] == r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] == r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] == r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] == r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] == r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] == r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] == r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] == r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] == r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] == r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] == r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BeqF8_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] == r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] == r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BneF8_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] != r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] != r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] != r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] != r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] != r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] != r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] != r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] != r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] != r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] != r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] != r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] != r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] != r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] != r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] != r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] != r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] != r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] != r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] != r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] != r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] != r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] != r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] != r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] != r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] != r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] != r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] != r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] != r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] != r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] != r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] != r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] != r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] != r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] != r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] != r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] != r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] != r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] != r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] != r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] != r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] != r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] != r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] != r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] != r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] != r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] != r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] != r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] != r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] != r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] != r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] != r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] != r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] != r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] != r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] != r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] != r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] != r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] != r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] != r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] != r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] != r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] != r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] != r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] != r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] != r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] != r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] != r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] != r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] != r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] != r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] != r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] != r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] != r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] != r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] != r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] != r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] != r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] != r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] != r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] != r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] != r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] != r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] != r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] != r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] != r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] != r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] != r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] != r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] != r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] != r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] != r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] != r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] != r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] != r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] != r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] != r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] != r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] != r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] != r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] != r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] != r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] != r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] != r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] != r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] != r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] != r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] != r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] != r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] != r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] != r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] != r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] != r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] != r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] != r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] != r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] != r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] != r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] != r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] != r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] != r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] != r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] != r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] != r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] != r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] != r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] != r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BneF8_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] != r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] != r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BltF8_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] < r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] < r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] < r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] < r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] < r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] < r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] < r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] < r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] < r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] < r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] < r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] < r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] < r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] < r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] < r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] < r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] < r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] < r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] < r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] < r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] < r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] < r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] < r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] < r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] < r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] < r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] < r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] < r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] < r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] < r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] < r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] < r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] < r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] < r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] < r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] < r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] < r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] < r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] < r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] < r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] < r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] < r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] < r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] < r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] < r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] < r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] < r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] < r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] < r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] < r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] < r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] < r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] < r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] < r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] < r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] < r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] < r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] < r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] < r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] < r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] < r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] < r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] < r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] < r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] < r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] < r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] < r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] < r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] < r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] < r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] < r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] < r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] < r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] < r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] < r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] < r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] < r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] < r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] < r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] < r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] < r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] < r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] < r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] < r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] < r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] < r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] < r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] < r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] < r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] < r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] < r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] < r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] < r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] < r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] < r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] < r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] < r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] < r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] < r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] < r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] < r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] < r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] < r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] < r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] < r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] < r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] < r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] < r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] < r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] < r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] < r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] < r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] < r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] < r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] < r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] < r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] < r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] < r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] < r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] < r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] < r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] < r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] < r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] < r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] < r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] < r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BltF8_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] < r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] < r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BgtF8_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] > r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] > r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] > r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] > r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] > r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] > r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] > r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] > r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] > r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] > r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] > r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] > r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] > r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] > r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] > r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] > r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] > r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] > r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] > r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] > r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] > r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] > r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] > r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] > r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] > r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] > r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] > r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] > r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] > r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] > r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] > r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] > r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] > r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] > r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] > r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] > r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] > r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] > r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] > r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] > r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] > r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] > r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] > r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] > r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] > r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] > r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] > r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] > r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] > r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] > r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] > r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] > r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] > r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] > r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] > r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] > r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] > r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] > r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] > r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] > r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] > r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] > r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] > r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] > r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] > r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] > r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] > r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] > r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] > r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] > r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] > r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] > r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] > r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] > r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] > r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] > r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] > r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] > r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] > r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] > r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] > r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] > r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] > r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] > r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] > r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] > r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] > r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] > r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] > r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] > r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] > r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] > r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] > r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] > r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] > r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] > r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] > r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] > r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] > r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] > r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] > r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] > r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] > r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] > r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] > r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] > r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] > r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] > r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] > r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] > r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] > r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] > r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] > r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] > r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] > r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] > r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] > r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] > r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] > r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] > r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] > r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] > r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] > r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] > r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] > r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] > r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgtF8_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] > r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] > r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BleF8_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] <= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] <= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] <= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] <= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] <= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] <= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] <= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] <= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] <= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] <= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] <= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] <= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] <= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] <= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] <= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] <= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] <= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] <= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] <= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] <= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] <= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] <= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] <= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] <= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] <= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] <= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] <= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] <= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] <= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] <= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] <= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] <= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] <= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] <= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] <= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] <= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] <= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] <= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] <= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] <= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] <= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] <= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] <= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] <= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] <= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] <= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] <= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] <= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] <= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] <= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] <= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] <= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] <= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] <= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] <= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] <= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] <= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] <= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] <= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] <= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] <= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] <= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] <= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] <= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] <= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] <= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] <= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] <= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] <= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] <= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] <= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] <= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] <= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] <= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] <= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] <= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] <= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] <= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] <= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] <= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] <= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] <= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] <= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] <= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] <= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] <= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] <= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] <= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] <= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] <= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] <= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] <= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] <= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] <= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] <= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] <= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] <= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] <= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] <= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] <= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] <= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] <= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] <= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] <= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] <= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] <= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] <= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] <= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] <= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] <= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] <= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] <= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] <= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] <= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] <= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] <= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] <= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] <= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] <= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] <= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] <= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] <= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] <= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] <= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] <= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] <= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BleF8_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] <= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] <= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
 
                 case OpCode2.BgeF8_R0_R0: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] >= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] >= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R0_R1: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] >= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] >= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R0_R2: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] >= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] >= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R0_R3: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] >= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] >= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R0_R4: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] >= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] >= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R0_R5: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] >= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] >= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R0_R6: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] >= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] >= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R0_R7: // <op> <u2 op offset>
-                    code += r0.AsDouble()[0] >= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r0.AsDouble()[0] >= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R1_R0: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] >= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] >= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R1_R1: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] >= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] >= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R1_R2: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] >= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] >= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R1_R3: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] >= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] >= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R1_R4: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] >= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] >= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R1_R5: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] >= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] >= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R1_R6: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] >= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] >= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R1_R7: // <op> <u2 op offset>
-                    code += r1.AsDouble()[0] >= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r1.AsDouble()[0] >= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R2_R0: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] >= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] >= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R2_R1: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] >= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] >= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R2_R2: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] >= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] >= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R2_R3: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] >= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] >= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R2_R4: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] >= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] >= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R2_R5: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] >= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] >= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R2_R6: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] >= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] >= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R2_R7: // <op> <u2 op offset>
-                    code += r2.AsDouble()[0] >= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r2.AsDouble()[0] >= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R3_R0: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] >= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] >= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R3_R1: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] >= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] >= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R3_R2: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] >= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] >= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R3_R3: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] >= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] >= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R3_R4: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] >= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] >= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R3_R5: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] >= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] >= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R3_R6: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] >= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] >= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R3_R7: // <op> <u2 op offset>
-                    code += r3.AsDouble()[0] >= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r3.AsDouble()[0] >= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R4_R0: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] >= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] >= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R4_R1: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] >= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] >= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R4_R2: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] >= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] >= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R4_R3: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] >= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] >= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R4_R4: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] >= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] >= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R4_R5: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] >= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] >= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R4_R6: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] >= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] >= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R4_R7: // <op> <u2 op offset>
-                    code += r4.AsDouble()[0] >= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r4.AsDouble()[0] >= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R5_R0: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] >= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] >= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R5_R1: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] >= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] >= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R5_R2: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] >= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] >= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R5_R3: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] >= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] >= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R5_R4: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] >= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] >= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R5_R5: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] >= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] >= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R5_R6: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] >= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] >= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R5_R7: // <op> <u2 op offset>
-                    code += r5.AsDouble()[0] >= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r5.AsDouble()[0] >= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R6_R0: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] >= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] >= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R6_R1: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] >= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] >= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R6_R2: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] >= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] >= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R6_R3: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] >= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] >= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R6_R4: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] >= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] >= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R6_R5: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] >= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] >= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R6_R6: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] >= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] >= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R6_R7: // <op> <u2 op offset>
-                    code += r6.AsDouble()[0] >= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r6.AsDouble()[0] >= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R7_R0: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] >= r0.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] >= r0.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R7_R1: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] >= r1.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] >= r1.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R7_R2: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] >= r2.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] >= r2.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R7_R3: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] >= r3.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] >= r3.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R7_R4: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] >= r4.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] >= r4.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R7_R5: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] >= r5.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] >= r5.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R7_R6: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] >= r6.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] >= r6.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 case OpCode2.BgeF8_R7_R7: // <op> <u2 op offset>
-                    code += r7.AsDouble()[0] >= r7.AsDouble()[0] ? 2 : *(code + 1); goto Next;
+                    code += r7.AsDouble()[0] >= r7.AsDouble()[0] ? *(code + 1) : 2; goto Next;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
         }
+
+    Ret:
+        regs.r0 = r0;
+        regs.r1 = r1;
+        regs.r2 = r2;
+        regs.r3 = r3;
+        regs.r4 = r4;
+        regs.r5 = r5;
+        regs.r6 = r6;
+        regs.r7 = r7;
     }
 }

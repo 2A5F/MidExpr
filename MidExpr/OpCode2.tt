@@ -25,7 +25,6 @@ public enum OpCode2 : ushort
     Ret,
 
     Call,
-    CallInd,
 
 <#
     for (var i = 0; i < regs; i++)
@@ -123,6 +122,30 @@ public enum OpCode2 : ushort
 #>
 
 <#
+    for (var i = 0; i < regs; i++)
+    {
+        foreach (var size in f_sizes)
+        {
+#>
+    Push_R<#= i #>_X<#= size #>,
+<#
+        }
+    }
+#>
+
+<#
+    for (var i = 0; i < regs; i++)
+    {
+        foreach (var size in i_sizes)
+        {
+#>
+    Pop_R<#= i #>_X<#= size #>,
+<#
+        }
+    }
+#>
+
+<#
     for (var d = 0; d < regs; d++)
     {
         for (var s = 0; s < regs; s++)
@@ -130,7 +153,7 @@ public enum OpCode2 : ushort
             foreach (var size in i_sizes)
             {
 #>
-    Mov_R<#= d #>_R<#= s #>_XR<#= size #>,
+    Mov_R<#= d #>_R<#= s #>_X<#= size #>,
 <#
             }
         }
