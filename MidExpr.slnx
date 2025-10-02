@@ -1,0 +1,5 @@
+﻿<Solution>
+  <Project Path="Benchmark\Benchmark.csproj" Type="C#" />
+  <Project Path="MidExpr\MidExpr.csproj" Type="C#" />
+  <Project Path="Test1\Test1.csproj" Type="C#" />
+</Solution>

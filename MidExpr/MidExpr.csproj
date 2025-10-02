@@ -21,4 +21,12 @@
         <Exec WorkingDirectory="$(ProjectDir)" Command="dotnet tool run t4 -v %(TextTemplate.Identity) -o %(TextTemplate.RelativeDir)%(TextTemplate.Filename).cs -I=%(TextTemplate.RelativeDir)" EnvironmentVariables="ProjectDir=$(ProjectDir)"/>
     </Target>
 
+    <Target Name="BuildNative" AfterTargets="Build">
+        <Exec WorkingDirectory="$(SolutionDir)" Command="cmake --build --target MidExpr.Native --config Release --preset Release"/>
+        <ItemGroup>
+            <NativeOutput Include="$(SolutionDir)/build/MidExpr/Release/**/*.dll"/>
+        </ItemGroup>
+        <Copy SourceFiles="@(NativeOutput)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" UseHardlinksIfPossible="true"/>
+    </Target>
+
 </Project>
