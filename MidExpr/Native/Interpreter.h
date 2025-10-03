@@ -1,49 +1,274 @@
 #pragma once
 
+#include <utility>
+
 #include "OpCode.h"
 #include "Defines.h"
 #include "Func.h"
 
+#ifdef __x86_64
+#include <immintrin.h>
+#endif
+
 namespace Coplt
 {
-    union alignas(16) MidReg
+#ifdef __x86_64
+    using MidReg = __m128;
+
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const uint8_t v)
     {
-        uint8_t u8;
-        uint16_t u16;
-        uint32_t u32;
-        uint64_t u64;
-        size_t usize;
-        int8_t i8;
-        int16_t i16;
-        int32_t i32;
-        int64_t i64;
-        ptrdiff_t isize;
-        float f32;
-        double f64;
+        return _mm_castsi128_ps(_mm_set_epi8(
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, static_cast<int8_t>(v)
+        ));
+    }
 
-        MidReg() = default;
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const int8_t v)
+    {
+        return _mm_castsi128_ps(_mm_set_epi8(
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, v
+        ));
+    }
 
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const uint8_t v) : MidReg() { u8 = v; } // NOLINT(*-explicit-constructor)
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const uint16_t v) : MidReg() { u16 = v; } // NOLINT(*-explicit-constructor)
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const uint32_t v) : MidReg() { u32 = v; } // NOLINT(*-explicit-constructor)
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const uint64_t v) : MidReg() { u64 = v; } // NOLINT(*-explicit-constructor)
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const int8_t v) : MidReg() { i8 = v; } // NOLINT(*-explicit-constructor)
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const int16_t v) : MidReg() { i16 = v; } // NOLINT(*-explicit-constructor)
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const int32_t v) : MidReg() { i32 = v; } // NOLINT(*-explicit-constructor)
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const int64_t v) : MidReg() { i64 = v; } // NOLINT(*-explicit-constructor)
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const float v) : MidReg() { f32 = v; } // NOLINT(*-explicit-constructor)
-        // ReSharper disable once CppNonExplicitConvertingConstructor
-        MidReg(const double v) : MidReg() { f64 = v; } // NOLINT(*-explicit-constructor)
-    };
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const uint16_t v)
+    {
+        return _mm_castsi128_ps(_mm_set_epi16(
+            0, 0, 0, 0, 0, 0, 0, static_cast<int16_t>(v)
+        ));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const int16_t v)
+    {
+        return _mm_castsi128_ps(_mm_set_epi16(
+            0, 0, 0, 0, 0, 0, 0, v
+        ));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const uint32_t v)
+    {
+        return _mm_castsi128_ps(_mm_set_epi32(
+            0, 0, 0, static_cast<int32_t>(v)
+        ));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const int32_t v)
+    {
+        return _mm_castsi128_ps(_mm_set_epi32(
+            0, 0, 0, v
+        ));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const uint64_t v)
+    {
+        return _mm_castsi128_ps(_mm_set_epi64x(
+            0, static_cast<int64_t>(v)
+        ));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const int64_t v)
+    {
+        return _mm_castsi128_ps(_mm_set_epi64x(
+            0, v
+        ));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const float v)
+    {
+        return _mm_set_ps(0, 0, 0, v);
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_ld(const double v)
+    {
+        return _mm_castpd_ps(_mm_set_pd(0, v));
+    }
+
+    COPLT_FORCE_INLINE inline uint8_t reg_get_u8(const __m128 v)
+    {
+        return static_cast<uint8_t>(_mm_extract_epi8(v, 0));
+    }
+
+    COPLT_FORCE_INLINE inline int8_t reg_get_i8(const __m128 v)
+    {
+        return static_cast<int8_t>(_mm_extract_epi8(v, 0));
+    }
+
+    COPLT_FORCE_INLINE inline uint16_t reg_get_u16(const __m128 v)
+    {
+        return static_cast<uint16_t>(_mm_extract_epi16(v, 0));
+    }
+
+    COPLT_FORCE_INLINE inline int16_t reg_get_i16(const __m128 v)
+    {
+        return static_cast<int16_t>(_mm_extract_epi16(v, 0));
+    }
+
+    COPLT_FORCE_INLINE inline uint32_t reg_get_u32(const __m128 v)
+    {
+        return static_cast<uint32_t>(_mm_extract_epi32(v, 0));
+    }
+
+    COPLT_FORCE_INLINE inline int32_t reg_get_i32(const __m128 v)
+    {
+        return _mm_extract_epi32(v, 0);
+    }
+
+    COPLT_FORCE_INLINE inline uint64_t reg_get_u64(const __m128 v)
+    {
+        return static_cast<uint64_t>(_mm_extract_epi64(v, 0));
+    }
+
+    COPLT_FORCE_INLINE inline int64_t reg_get_i64(const __m128 v)
+    {
+        return _mm_extract_epi64(v, 0);
+    }
+
+    COPLT_FORCE_INLINE inline float reg_get_f32(const __m128 v)
+    {
+        return _mm_extract_ps(v, 0);
+    }
+
+    COPLT_FORCE_INLINE inline double reg_get_f64(const __m128 v)
+    {
+        return _mm_cvtsd_f64(_mm_castps_pd(v));
+    }
+
+    COPLT_FORCE_INLINE inline size_t reg_get_usize(const __m128 v)
+    {
+        if constexpr (sizeof(size_t) == 4)
+        {
+            return static_cast<size_t>(_mm_extract_epi32(v, 0));
+        }
+        else
+        {
+            return static_cast<size_t>(_mm_extract_epi64(v, 0));
+        }
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_and(const __m128 a, const __m128 b)
+    {
+        return _mm_and_ps(a, b);
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_add_u8(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_add_epi8(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_add_u16(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_add_epi16(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_add_u32(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_add_u64(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_add_epi64(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_add_f32(const __m128 a, const __m128 b)
+    {
+        return _mm_add_ps(a, b);
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_add_f64(const __m128 a, const __m128 b)
+    {
+        return _mm_castpd_ps(_mm_add_pd(_mm_castps_pd(a), _mm_castps_pd(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_sub_u8(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_sub_epi8(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_sub_u16(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_sub_epi16(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_sub_u32(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_sub_epi32(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_sub_u64(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_sub_epi64(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_sub_f32(const __m128 a, const __m128 b)
+    {
+        return _mm_sub_ps(a, b);
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_sub_f64(const __m128 a, const __m128 b)
+    {
+        return _mm_castpd_ps(_mm_sub_pd(_mm_castps_pd(a), _mm_castps_pd(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_mul_u8(const __m128 a, const __m128 b)
+    {
+        return reg_ld(static_cast<uint8_t>(reg_get_u8(a) * reg_get_u8(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_mul_u16(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_mullo_epi16(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_mul_u32(const __m128 a, const __m128 b)
+    {
+        return _mm_castsi128_ps(_mm_mul_epi32(_mm_castps_si128(a), _mm_castps_si128(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_mul_u64(const __m128 a, const __m128 b)
+    {
+        return reg_ld(reg_get_u64(a) * reg_get_u64(b));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_mul_f32(const __m128 a, const __m128 b)
+    {
+        return _mm_mul_ps(a, b);
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_mul_f64(const __m128 a, const __m128 b)
+    {
+        return _mm_castpd_ps(_mm_mul_pd(_mm_castps_pd(a), _mm_castps_pd(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_div_u8(const __m128 a, const __m128 b)
+    {
+        return reg_ld(static_cast<uint8_t>(reg_get_u8(a) / reg_get_u8(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_div_u16(const __m128 a, const __m128 b)
+    {
+        return reg_ld(static_cast<uint16_t>(reg_get_u16(a) / reg_get_u16(b)));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_div_u32(const __m128 a, const __m128 b)
+    {
+        return reg_ld(reg_get_u32(a) / reg_get_u32(b));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_div_u64(const __m128 a, const __m128 b)
+    {
+        return reg_ld(reg_get_u64(a) / reg_get_u64(b));
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_div_f32(const __m128 a, const __m128 b)
+    {
+        return _mm_div_ps(a, b);
+    }
+
+    COPLT_FORCE_INLINE inline __m128 reg_div_f64(const __m128 a, const __m128 b)
+    {
+        return _mm_castpd_ps(_mm_div_pd(_mm_castps_pd(a), _mm_castps_pd(b)));
+    }
 
     struct MidRegs
     {
@@ -56,6 +281,7 @@ namespace Coplt
         MidReg r6;
         MidReg r7;
     };
+#endif
 
     struct MidFrame
     {

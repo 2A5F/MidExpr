@@ -12,15 +12,21 @@
     var i_sizes = new[] { 1, 2, 4, 8 };
     var f_sizes = new[] { 4, 8 };
 
+    string GetVTConv(int size, bool sig = false) => size switch {
+        2 => sig ? "int16_t" : "uint16_t",
+        4 => sig ? "int32_t" : "uint32_t",
+        8 => sig ? "int64_t" : "uint64_t",
+        _ => sig ? "int8_t" : "uint8_t" };
+
     string GetVConv(int size, bool sig = false) => size switch {
-        2 => sig ? ".i16" : ".u16",
-        4 => sig ? ".i32" : ".u32",
-        8 => sig ? ".i64" : ".u64",
-        _ => sig ? ".i8" : ".u8" };
+        2 => sig ? "i16" : "u16",
+        4 => sig ? "i32" : "u32",
+        8 => sig ? "i64" : "u64",
+        _ => sig ? "i8" : "u8" };
 
     string GetVConvF(int size) => size switch {
-        8 => ".f64",
-        _ => ".f32" };
+        8 => "f64",
+        _ => "f32" };
 
     string GetPConv(int size, bool use_byte = false) => size switch {
         2 => "reinterpret_cast<uint16_t*>",
@@ -121,7 +127,7 @@ Next:
     for (var i = 0; i < regs; i++)
     {
 #>
-        case OpCode::LdNull_R<#= i #>: r<#= i #> = {}; code++; goto Next;
+        case OpCode::LdNull_R<#= i #>: r<#= i #> = reg_ld(0zu); code++; goto Next;
 <#
     }
 #>
@@ -131,33 +137,33 @@ Next:
 #>
 
         case OpCode::Ldc_R<#= i #>_I4_M1:
-            r<#= i #> = -1; code++; goto Next;
+            r<#= i #> = reg_ld(-1); code++; goto Next;
         case OpCode::Ldc_R<#= i #>_I4_0:
-            r<#= i #> = 0; code++; goto Next;
+            r<#= i #> = reg_ld(0); code++; goto Next;
         case OpCode::Ldc_R<#= i #>_I4_1:
-            r<#= i #> = 1; code++; goto Next;
+            r<#= i #> = reg_ld(1); code++; goto Next;
         case OpCode::Ldc_R<#= i #>_I4_2:
-            r<#= i #> = 2; code++; goto Next;
+            r<#= i #> = reg_ld(2); code++; goto Next;
         case OpCode::Ldc_R<#= i #>_I4_3:
-            r<#= i #> = 3; code++; goto Next;
+            r<#= i #> = reg_ld(3); code++; goto Next;
         case OpCode::Ldc_R<#= i #>_I4_5:
-            r<#= i #> = 5; code++; goto Next;
+            r<#= i #> = reg_ld(5); code++; goto Next;
 
         case OpCode::Ldc_R<#= i #>_F4_1:
-            r<#= i #> = 1.0f; code++; goto Next;
+            r<#= i #> = reg_ld(1.0f); code++; goto Next;
         case OpCode::Ldc_R<#= i #>_F4_M1:
-            r<#= i #> = -1.0f; code++; goto Next;
+            r<#= i #> = reg_ld(-1.0f); code++; goto Next;
         case OpCode::Ldc_R<#= i #>_F4_2:
-            r<#= i #> = 2.0f; code++; goto Next;
+            r<#= i #> = reg_ld(.0f); code++; goto Next;
         case OpCode::Ldc_R<#= i #>_F4_05: // 0.5
-            r<#= i #> = 0.5f; code++; goto Next;
+            r<#= i #> = reg_ld(0.5f); code++; goto Next;
         case OpCode::Ldc_R<#= i #>_F4_M05: // -0.5
-            r<#= i #> = -0.5f; code++; goto Next;
+            r<#= i #> = reg_ld(-0.5f); code++; goto Next;
 
         case OpCode::Ldc_R<#= i #>_X4: // <op> <4 byte value>
-            r<#= i #> = *reinterpret_cast<const int32_t*>(code + 1); code += 3; goto Next;
+            r<#= i #> = reg_ld(*reinterpret_cast<const int32_t*>(code + 1)); code += 3; goto Next;
         case OpCode::Ldc_R<#= i #>_X8: // <op> <8 byte value>
-            r<#= i #> = *reinterpret_cast<const int64_t*>(code + 1); code += 5; goto Next;
+            r<#= i #> = reg_ld(*reinterpret_cast<const int64_t*>(code + 1)); code += 5; goto Next;
 <#
     }
 #>
@@ -167,10 +173,11 @@ Next:
     {
         foreach (var size in i_sizes)
         {
+            var vt_conv = GetVTConv(size, true);
             var p_conv = GetPConv(size, true);
 #>
         case OpCode::LdLoc_R<#= i #>_X<#= size #>: // <op> <u2 offset (4 byte step)>
-            r<#= i #> = *<#= p_conv #>(stack + 4 * *(code + 1)); code += 2; goto Next;
+            r<#= i #> = reg_ld(static_cast<<#= vt_conv #>>(*<#= p_conv #>(stack + 4 * *(code + 1)))); code += 2; goto Next;
 <#
         }
     }
@@ -181,7 +188,7 @@ Next:
     {
 #>
         case OpCode::LdLocA_R<#= i #>: // <op> <u2 offset (4 byte step)>
-            r<#= i #> = reinterpret_cast<size_t>(stack + 4 * *(code + 1)); code += 2; goto Next;
+            r<#= i #> = reg_ld(reinterpret_cast<size_t>(stack + 4 * *(code + 1))); code += 2; goto Next;
 <#
     }
 #>
@@ -193,11 +200,11 @@ Next:
         {
             foreach (var size in i_sizes)
             {
-                var v_conv = GetVConv(size);
+                var vt_conv = GetVTConv(size);
                 var p_conv = GetPConv(size, true);
 #>
         case OpCode::LdInd_R<#= d #>_R<#= s #>_X<#= size #>:
-            r<#= d #> = *<#= p_conv #>(r<#= s #>.usize); code++; goto Next;
+            r<#= d #> = reg_ld(static_cast<<#= vt_conv #>>(*<#= p_conv #>(reg_get_usize(r<#= s #>)))); code++; goto Next;
 <#
             }
         }
@@ -215,7 +222,7 @@ Next:
                 var p_conv = GetPConv(size, true);
 #>
         case OpCode::StInd_R<#= d #>_R<#= s #>_X<#= size #>:
-            *<#= p_conv #>(r<#= d #>.usize) = r<#= s #><#= v_conv #>; code++; goto Next;
+            *<#= p_conv #>(reg_get_usize(r<#= d #>)) = reg_get_<#= v_conv #>(r<#= s #>); code++; goto Next;
 <#
             }
         }
@@ -231,7 +238,7 @@ Next:
             var p_conv = GetPConv(size);
 #>
         case OpCode::Push_R<#= i #>_X<#= size #>:
-            *<#= p_conv #>(calc_stack) = r<#= i #><#= v_conv #>; calc_stack += <#= size #>; code++; goto Next;
+            *<#= p_conv #>(calc_stack) = reg_get_<#= v_conv #>(r<#= i #>); calc_stack += <#= size #>; code++; goto Next;
 <#
         }
     }
@@ -242,11 +249,11 @@ Next:
     {
         foreach (var size in i_sizes)
         {
-            var v_conv = GetVConv(size);
+            var vt_conv = GetVTConv(size);
             var p_conv = GetPConv(size);
 #>
         case OpCode::Pop_R<#= i #>_X<#= size #>:
-            calc_stack -= <#= Math.Max(size, 4) #>; r<#= i #><#= v_conv #> = *<#= p_conv #>(calc_stack); code++; goto Next;
+            calc_stack -= <#= Math.Max(size, 4) #>; r<#= i #> = reg_ld(static_cast<<#= vt_conv #>>(*<#= p_conv #>(calc_stack))); code++; goto Next;
 <#
         }
     }
@@ -259,10 +266,11 @@ Next:
         {
             foreach (var size in i_sizes)
             {
-                var v_conv = GetVConv(size);
+                var vt_conv = GetVTConv(size);
+                var svt_conv = GetVTConv(size, true);
 #>
         case OpCode::Mov_R<#= d #>_R<#= s #>_X<#= size #>:
-            r<#= d #> = r<#= s #><#= v_conv #>; code++; goto Next;
+            r<#= d #> = reg_and(r<#= s #>, reg_ld(static_cast<<#= vt_conv #>>(static_cast<<#= svt_conv #>>(-1)))); code++; goto Next;
 <#
             }
         }
@@ -273,6 +281,7 @@ Next:
     {
         foreach (var size in i_sizes)
         {
+            var uv_conv = GetVConv(size);
             var v_conv = GetVConv(size, sig == "I");
             var cv_conv = GetCVConv(size, sig == "I");
 
@@ -288,7 +297,7 @@ Next:
                     {
 #>
         case OpCode::<#= calc #><#= sig #>_R<#= d #>_R<#= s #>_X<#= size #>:
-            r<#= d #> = <#= cv_conv #>(r<#= d #><#= v_conv #> <#= op #> r<#= s #><#= v_conv #>); code++; goto Next;
+            r<#= d #> = reg_<#= calc.ToLower() #>_<#= uv_conv #>(r<#= d #>, r<#= s #>); code++; goto Next;
 <#
                     }
                 }
@@ -313,7 +322,7 @@ Next:
                 {
 #>
         case OpCode::<#= calc #>F_R<#= d #>_R<#= s #>_X<#= size #>:
-            r<#= d #> = <#= cv_conv #>(r<#= d #><#= v_conv #> <#= op #> r<#= s #><#= v_conv #>); code++; goto Next;
+            r<#= d #> = reg_<#= calc.ToLower() #>_<#= v_conv #>(r<#= d #>, r<#= s #>); code++; goto Next;
 <#
                 }
             }
@@ -328,7 +337,7 @@ Next:
     {
 #>
         case OpCode::BTrue_R<#= d #>: // <op> <u2 op offset>
-            code += r<#= d #>.u64 == 0 ? 2 : *(code + 1); goto Next;
+            code += reg_get_u64(r<#= d #>) == 0 ? 2 : *(code + 1); goto Next;
 <#
     }
 #>
@@ -338,7 +347,7 @@ Next:
     {
 #>
         case OpCode::BFalse_R<#= d #>: // <op> <u2 op offset>
-            code += r<#= d #>.u64 != 0 ? 2 : *(code + 1); goto Next;
+            code += reg_get_u64(r<#= d #>) != 0 ? 2 : *(code + 1); goto Next;
 <#
     }
 #>
@@ -355,7 +364,7 @@ Next:
             {
 #>
         case OpCode::B<#= cmp #>I_R<#= d #>_R<#= s #>: // <op> <u2 op offset>
-            code += r<#= d #>.u64 <#= op #> r<#= s #>.u64 ? *(code + 1) : 2; goto Next;
+            code += reg_get_u64(r<#= d #>) <#= op #> reg_get_u64(r<#= s #>) ? *(code + 1) : 2; goto Next;
 <#
             }
         }
@@ -378,13 +387,14 @@ Next:
                 {
 #>
         case OpCode::B<#= cmp #>F<#= size #>_R<#= d #>_R<#= s #>: // <op> <u2 op offset>
-            code += r<#= d #><#= v_conv #> <#= op #> r<#= s #><#= v_conv #> ? *(code + 1) : 2; goto Next;
+            code += reg_get_<#= v_conv #>(r<#= d #>) <#= op #> reg_get_<#= v_conv #>(r<#= s #>) ? *(code + 1) : 2; goto Next;
 <#
                 }
             }
         }
     }
 #>
+        default: std::unreachable();
 }
 
 Ret:

@@ -4,6 +4,12 @@ namespace Test1;
 
 public class Tests
 {
+    [SetUp]
+    public void Setup()
+    {
+        Console.WriteLine(Environment.CurrentDirectory);
+    }
+    
     public int FibRec(int n)
     {
         if (n < 3) return 1;

@@ -32,12 +32,10 @@
     <list default="true" id="c68c9aea-3b80-481c-9522-0b404ab42b99" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Benchmark/Benchmark.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/Benchmark/Benchmark.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Benchmark/FibRec1.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Benchmark/FibRec1.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/MidExpr/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/MidExpr/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/MidExpr/MidExpr.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/MidExpr/MidExpr.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/MidExpr/Native/OpCode.h" beforeDir="false" afterPath="$PROJECT_DIR$/MidExpr/Native/OpCode.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/MidExpr/Native/OpCode.tt" beforeDir="false" afterPath="$PROJECT_DIR$/MidExpr/Native/OpCode.tt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Test1/Test1.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/Test1/Test1.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/MidExpr/Native/Defines.h" beforeDir="false" afterPath="$PROJECT_DIR$/MidExpr/Native/Defines.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/MidExpr/Native/Interpreter.cc" beforeDir="false" afterPath="$PROJECT_DIR$/MidExpr/Native/Interpreter.cc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/MidExpr/Native/Interpreter.h" beforeDir="false" afterPath="$PROJECT_DIR$/MidExpr/Native/Interpreter.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/MidExpr/Native/Interpreter.tt" beforeDir="false" afterPath="$PROJECT_DIR$/MidExpr/Native/Interpreter.tt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Test1/UnitTest1.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Test1/UnitTest1.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -46,6 +44,7 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="ClangdSettings">
+    <option name="clangdShowErrors" value="false" />
     <option name="formatViaClangd" value="false" />
   </component>
   <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Main - Release" />
@@ -94,7 +93,7 @@
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;language.cpp.clangd&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
@@ -119,7 +118,8 @@
       <updated>1759393307754</updated>
       <workItem from="1759393308319" duration="1108000" />
       <workItem from="1759467616606" duration="8359000" />
-      <workItem from="1759476076419" duration="1286000" />
+      <workItem from="1759476076419" duration="3764000" />
+      <workItem from="1759480633758" duration="4834000" />
     </task>
     <servers />
   </component>
