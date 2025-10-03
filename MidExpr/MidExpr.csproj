@@ -9,6 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Coplt.Dropping" Version="0.6.0"/>
         <PackageReference Include="Coplt.Union" Version="0.19.2"/>
     </ItemGroup>
 
@@ -22,9 +23,12 @@
     </Target>
 
     <Target Name="BuildNative" AfterTargets="Build">
-        <Exec WorkingDirectory="$(SolutionDir)" Command="cmake --build --target MidExpr.Native --config Release --preset Release"/>
+        <Exec WorkingDirectory="$(SolutionDir)" Command="cmake --build --target MidExpr.Native --config Debug --preset Debug" Condition="'$(Configuration)' == 'Debug'"/>
+        <Exec WorkingDirectory="$(SolutionDir)" Command="cmake --build --target MidExpr.Native --config Release --preset Release" Condition="'$(Configuration)' == 'Release'"/>
         <ItemGroup>
-            <NativeOutput Include="$(SolutionDir)/build/MidExpr/Release/**/*.dll"/>
+            <NativeOutput Include="$(SolutionDir)/build/MidExpr/Debug/**/*.dll" Condition="'$(Configuration)' == 'Debug'"/>
+            <NativeOutput Include="$(SolutionDir)/build/MidExpr/Debug/**/*.pdb" Condition="'$(Configuration)' == 'Debug'"/>
+            <NativeOutput Include="$(SolutionDir)/build/MidExpr/Release/**/*.dll"  Condition="'$(Configuration)' == 'Release'"/>
         </ItemGroup>
         <Copy SourceFiles="@(NativeOutput)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" UseHardlinksIfPossible="true"/>
     </Target>

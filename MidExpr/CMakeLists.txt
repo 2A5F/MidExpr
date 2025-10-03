@@ -6,4 +6,9 @@ add_library(${PROJECT_NAME} SHARED
         Native/lib.cc
         Native/lib.h
         Native/OpCode.h
+        Native/Defines.h
+        Native/Interpreter.cc
+        Native/Interpreter.h
+        Native/Func.cc
+        Native/Func.h
 )

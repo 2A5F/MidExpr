@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-namespace MidExpr
+namespace Coplt
 {
 
 enum class OpCode : uint16_t

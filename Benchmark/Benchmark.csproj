@@ -15,4 +15,13 @@
       <PackageReference Include="BenchmarkDotNet" Version="0.15.4" />
     </ItemGroup>
 
+    <Target Name="CopyNative" AfterTargets="Build">
+        <ItemGroup>
+            <NativeOutput Include="$(SolutionDir)/build/MidExpr/Debug/**/*.dll" Condition="'$(Configuration)' == 'Debug'"/>
+            <NativeOutput Include="$(SolutionDir)/build/MidExpr/Debug/**/*.pdb" Condition="'$(Configuration)' == 'Debug'"/>
+            <NativeOutput Include="$(SolutionDir)/build/MidExpr/Release/**/*.dll"  Condition="'$(Configuration)' == 'Release'"/>
+        </ItemGroup>
+        <Copy SourceFiles="@(NativeOutput)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" UseHardlinksIfPossible="true"/>
+    </Target>
+
 </Project>
